@@ -4,11 +4,14 @@ import com.example.fcsa311.a1.card.Card;
 import com.example.fcsa311.a1.card.CardLoader;
 import com.example.fcsa311.a1.card.CardStatus;
 import com.example.fcsa311.a1.organizer.CardOrganizer;
+import com.example.fcsa311.a1.organizer.MostMistakesFirstSorter;
 import com.example.fcsa311.a1.organizer.Random;
+import com.example.fcsa311.a1.organizer.RecentMistakesFirstSorter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.stream.Collectors;
 import org.apache.commons.cli.*;
 
 public class Flashcard {
@@ -16,6 +19,13 @@ public class Flashcard {
 
     Options options = new Options();
     options.addOption("h", "help", false, "Тусламжийн мэдээлэл харуулах");
+    options.addOption(
+        "o",
+        "order",
+        true,
+        "Эрэмбэлэгч (default: random). Сонголтууд:\n"
+            + "[random, worst-first, recent-mistakes-first]");
+    options.addOption(null, "invert", false, "Картын асуулт, хариултыг сольж харуулах");
 
     CommandLineParser parser = new DefaultParser();
     HelpFormatter formatter = new HelpFormatter();
@@ -42,6 +52,8 @@ public class Flashcard {
     String filePath = positional.get(0);
 
     Scanner scanner = new Scanner(System.in);
+    boolean invert = cmd.hasOption("invert");
+    String orderOption = cmd.getOptionValue("order", "random");
 
     do {
       List<Card> cards;
@@ -71,8 +83,25 @@ public class Flashcard {
         break;
       }
 
-      // TODO: order argumentaar random-s uur sorter songoh
-      CardOrganizer organizer = new Random();
+      if (invert) {
+        cards = cards.stream().map(Card::invert).collect(Collectors.toList());
+      }
+
+      CardOrganizer organizer;
+      switch (orderOption) {
+        case "random":
+          organizer = new Random();
+          break;
+        case "worst-first":
+          organizer = new MostMistakesFirstSorter();
+          break;
+        case "recent-mistakes-first":
+          organizer = new RecentMistakesFirstSorter();
+          break;
+        default:
+          System.out.println("Эрэмбэлэгч байхгүй: " + orderOption);
+          return;
+      }
       cards = organizer.organize(cards);
 
       int correctCount = 0;
@@ -88,7 +117,7 @@ public class Flashcard {
         }
       }
 
-      System.out.printf("Бүх асуултанд хариулла: %d-с %d зөв.%n", cards.size(), correctCount);
+      System.out.printf("Бүх асуултанд хариуллаа. %d-с %d зөв.%n", cards.size(), correctCount);
 
       UserDataManager.saveStatuses(filePath, cards);
 
