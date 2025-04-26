@@ -1,5 +1,8 @@
 package com.example.fcsa311.a1;
 
+import com.example.fcsa311.a1.achievement.AchievementType;
+import com.example.fcsa311.a1.achievement.CardResult;
+import com.example.fcsa311.a1.achievement.SessionResult;
 import com.example.fcsa311.a1.card.Card;
 import com.example.fcsa311.a1.card.CardLoader;
 import com.example.fcsa311.a1.card.CardStatus;
@@ -9,10 +12,12 @@ import com.example.fcsa311.a1.organizer.Random;
 import com.example.fcsa311.a1.organizer.RecentMistakesFirstSorter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.cli.*;
 
@@ -83,6 +88,7 @@ public class Flashcard {
     }
 
     Scanner scanner = new Scanner(System.in);
+    Set<AchievementType> unlocked = new HashSet<>();
     while (true) {
       List<Card> cards;
       try {
@@ -136,18 +142,20 @@ public class Flashcard {
       for (Card card : cards) {
         needed.put(card, repetitions);
       }
+      List<CardResult> results = new ArrayList<>();
 
       int totalCorrect = 0;
       int totalQuestionAsked = 0;
 
       while (!needed.isEmpty()) {
-        List<Card> roundCards = organizer.organize(new ArrayList<>(needed.keySet()));
-
-        for (Card card : roundCards) {
+        List<Card> round = organizer.organize(new ArrayList<>(needed.keySet()));
+        for (Card card : round) {
           int rem = needed.get(card);
           System.out.println("Асуулт: " + card.getQuestion());
           System.out.print("Таны хариулт: ");
+          long startTime = System.currentTimeMillis();
           boolean correct = card.attempt(scanner.nextLine());
+          long answerTime = System.currentTimeMillis() - startTime;
           totalQuestionAsked++;
           if (correct) {
             totalCorrect++;
@@ -161,6 +169,20 @@ public class Flashcard {
           } else {
             System.out.println("Буруу байна. Зөв хариулт: " + card.getAnswer() + "\n");
           }
+          CardStatus st = card.getStatus();
+          results.add(
+              new CardResult(answerTime, correct, st.getTotalAttempts(), st.getCorrectAttempts()));
+          SessionResult partial = new SessionResult(results);
+          AchievementType.earned(partial)
+              .filter(
+                  a ->
+                      !unlocked.contains(a)
+                          && (a == AchievementType.REPEAT || a == AchievementType.CONFIDENT))
+              .forEach(
+                  a -> {
+                    System.out.println("Амжилтад хүрлээ: " + a.getName());
+                    unlocked.add(a);
+                  });
           if (needed.isEmpty()) {
             break;
           }
@@ -171,6 +193,11 @@ public class Flashcard {
           "Бүх асуултанд хариуллаа. %d-с %d зөв хариулсан.%n", totalQuestionAsked, totalCorrect);
 
       UserDataManager.saveStatuses(filePath, cards);
+
+      SessionResult sessionResult = new SessionResult(results);
+      AchievementType.earned(sessionResult)
+          .map(AchievementType::getName)
+          .forEach(name -> System.out.println("Авсан амжилт: " + name));
 
       System.out.print("Дахиж эхлэх үү? (y/N): ");
       String resp = scanner.nextLine().trim().toLowerCase();
